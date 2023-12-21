@@ -106,7 +106,6 @@ void *copy_directory(void *arg) {
                 }
             }
         } else if (S_ISREG(statbuf.st_mode)) {
-            //if (!is_file_copied(src_path)) {
                 path_data *file_paths = malloc(sizeof(path_data));
                 strcpy(file_paths->source, src_path);
                 strcpy(file_paths->dest, dest_path);
@@ -119,10 +118,8 @@ void *copy_directory(void *arg) {
                         free(file_paths);
                     } else {
                         thread_count++;
-                        //mark_file_as_copied(src_path);
                     }
                 }
-            //}
         }
     }
 
