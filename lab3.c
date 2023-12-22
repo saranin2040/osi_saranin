@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +10,9 @@
 
 #define BUFFER_SIZE 8192
 
+pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 typedef struct {
     char source[PATH_MAX];
     char dest[PATH_MAX];
@@ -21,6 +23,8 @@ void *copy_file(void *arg) {
     int src_fd, dest_fd;
     ssize_t bytes_read, bytes_written;
     char buffer[BUFFER_SIZE];
+
+    pthread_mutex_lock(&file_mutex);
 
     src_fd = open(paths->source, O_RDONLY);
     if (src_fd == -1) {
@@ -34,6 +38,8 @@ void *copy_file(void *arg) {
         close(src_fd);
         goto cleanup;
     }
+
+    pthread_mutex_unlock(&file_mutex);
 
     printf("Copying file from %s to %s\n", paths->source, paths->dest);
 
@@ -65,6 +71,8 @@ void *copy_directory(void *arg) {
     char src_path[PATH_MAX];
     char dest_path[PATH_MAX];
 
+    pthread_mutex_lock(&dir_mutex);
+
     printf("Copying directory from %s to %s\n", paths->source, paths->dest);
 
     if ((dir = opendir(paths->source)) == NULL) {
@@ -72,9 +80,11 @@ void *copy_directory(void *arg) {
         return NULL;
     }
 
+    pthread_mutex_unlock(&dir_mutex);
+
     mkdir(paths->dest, 0755);
 
-    pthread_t thread_ids[100];  
+    pthread_t thread_ids[100];
     int thread_count = 0;
 
     while ((entry = readdir(dir)) != NULL) {
@@ -107,20 +117,24 @@ void *copy_directory(void *arg) {
                 }
             }
         } else if (S_ISREG(statbuf.st_mode)) {
-                path_data *file_paths = malloc(sizeof(path_data));
-                strcpy(file_paths->source, src_path);
-                strcpy(file_paths->dest, dest_path);
+            pthread_mutex_lock(&file_mutex);
 
-                printf("create copying file from %s to %s\n", file_paths->source, file_paths->dest);
+            path_data *file_paths = malloc(sizeof(path_data));
+            strcpy(file_paths->source, src_path);
+            strcpy(file_paths->dest, dest_path);
 
-                if (thread_count < 100) {
-                    if (pthread_create(&thread_ids[thread_count], NULL, copy_file, file_paths) != 0) {
-                        perror("pthread_create");
-                        free(file_paths);
-                    } else {
-                        thread_count++;
-                    }
+            pthread_mutex_unlock(&file_mutex);
+
+            printf("create copying file from %s to %s\n", file_paths->source, file_paths->dest);
+
+            if (thread_count < 100) {
+                if (pthread_create(&thread_ids[thread_count], NULL, copy_file, file_paths) != 0) {
+                    perror("pthread_create");
+                    free(file_paths);
+                } else {
+                    thread_count++;
                 }
+            }
         }
     }
 
@@ -133,7 +147,6 @@ void *copy_directory(void *arg) {
 
     return NULL;
 }
-
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
